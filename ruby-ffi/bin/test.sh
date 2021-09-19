@@ -13,6 +13,6 @@ distros=${1:-"alpine debian"}
 for distro in $distros
 do
   echo "=> Running specs for $distro"
-  $DOCKER build . $DOCKER_BUILD_FLAGS -f docker/Dockerfile.ruby-$distro-demo -t ruby-$distro-demo:latest
+  $DOCKER build . $DOCKER_BUILD_FLAGS -f ruby-ffi/docker/Dockerfile.ruby-$distro-demo -t ruby-$distro-demo:latest
   $DOCKER run ruby-$distro-demo rspec spec
 done

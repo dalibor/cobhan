@@ -1,7 +1,25 @@
-FROM alpine:3.14 AS libplugtest-binaries-clone
-RUN apk add git
+FROM docker.io/golang:1.17.0-alpine AS libplugtest-binaries
 
-RUN git clone --depth 1 --branch main --single-branch https://github.com/jgowdy/libplugtest-binaries
+COPY apk/libgo-10.3.1_git20210424-r2.apk /
+RUN apk add --allow-untrusted /libgo-10.3.1_git20210424-r2.apk
+
+# Don't install gcc-go or build-base until our patched libgo apk is installed
+RUN apk add gcc-go build-base
+
+ENV go_app /cobhan
+WORKDIR $go_app
+COPY go.mod $go_app/
+COPY main.go $go_app/
+
+RUN mkdir /output
+
+# Build libplugtest for linux-musl-amd64 using stock gcc-go
+# Set LD_RUN_PATH so the linker puts an rpath of . into the ELF for patched libgo.so
+RUN LD_RUN_PATH=. CGO_ENABLED=1 GOOS=linux go build -compiler=gccgo -buildmode=c-shared -o /output/libplugtest.so
+
+# Output files are in /output/
+
+
 
 FROM docker.io/ruby:3.0.2-alpine3.14
 
@@ -12,13 +30,14 @@ ENV app /ruby-test/ruby-ffi
 RUN mkdir -p $app
 WORKDIR $app
 
-COPY Gemfile $app
-COPY Gemfile.lock $app
-COPY cobhan.gemspec $app
-COPY lib/cobhan/version.rb $app/lib/cobhan/
+COPY ruby-ffi/Gemfile $app
+COPY ruby-ffi/Gemfile.lock $app
+COPY ruby-ffi/cobhan.gemspec $app
+COPY ruby-ffi/lib/cobhan/version.rb $app/lib/cobhan/
 RUN bundle install
 
-COPY . $app
-COPY --from=libplugtest-binaries-clone /libplugtest-binaries/linux-musl $app/lib/cobhan/output/linux-musl
+COPY ruby-ffi $app
+COPY --from=libplugtest-binaries /output/ $app/lib/cobhan/output/linux-musl/amd64
+COPY --from=libplugtest-binaries /usr/lib/libgo.so.16 $app/lib/cobhan/output/linux-musl/amd64
 
 CMD ruby example.rb
